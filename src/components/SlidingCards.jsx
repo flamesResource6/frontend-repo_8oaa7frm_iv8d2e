@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { motion } from 'framer-motion'
 
 /**
  * SlidingCards
  * - Full-width, edge-to-edge slider
- * - Supports touch, mouse wheel, keyboard, and buttons
- * - Snap-to-slide with smooth transitions
+ * - Interactive: touch scroll, mouse wheel, keyboard arrows, buttons, dots
+ * - Animations: image parallax/zoom, content fade/slide, control hover
  *
  * Props:
  * - cards: Array<{ id?: string|number, title: string, description?: string, image?: string, ctaText?: string, ctaHref?: string, badge?: string }>
@@ -53,15 +54,14 @@ export default function SlidingCards({
     ]
   }, [cards])
 
+  // Observe slides to track which is most visible
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
 
-    // Set up IntersectionObserver to track active slide
     const slides = Array.from(el.querySelectorAll('[data-slide]'))
     const observer = new IntersectionObserver(
       (entries) => {
-        // Find the most visible entry
         const visible = entries
           .filter((e) => e.isIntersecting)
           .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0]
@@ -75,14 +75,12 @@ export default function SlidingCards({
 
     slides.forEach((s) => observer.observe(s))
 
-    // Keyboard nav
     const onKey = (e) => {
       if (e.key === 'ArrowRight') next()
       if (e.key === 'ArrowLeft') prev()
     }
     window.addEventListener('keydown', onKey)
 
-    // Wheel to scroll horizontally
     const onWheel = (e) => {
       if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
         el.scrollBy({ left: e.deltaY, behavior: 'smooth' })
@@ -97,6 +95,7 @@ export default function SlidingCards({
     }
   }, [])
 
+  // Autoplay
   useEffect(() => {
     if (!autoPlay) return
     const el = containerRef.current
@@ -126,12 +125,23 @@ export default function SlidingCards({
     scrollToIndex(idx)
   }
 
+  const contentVariants = {
+    inactive: { opacity: 0, y: 20, filter: 'blur(2px)' },
+    active: { opacity: 1, y: 0, filter: 'blur(0px)' },
+  }
+
+  const imageVariants = {
+    inactive: { scale: 1, opacity: 0.95 },
+    active: { scale: 1.05, opacity: 1 },
+  }
+
   return (
-    <div className={`w-full relative ${height}`}>
+    <div className={`w-full relative ${height}`} role="region" aria-roledescription="carousel" aria-label="Featured slides">
       {/* Slider */}
       <div
         ref={containerRef}
         className="w-full h-full overflow-x-auto overflow-y-hidden snap-x snap-mandatory scroll-smooth scrollbar-hide relative"
+        aria-live="polite"
       >
         <div className="flex w-full h-full">
           {safeCards.map((card, i) => (
@@ -140,13 +150,20 @@ export default function SlidingCards({
               data-slide
               data-index={i}
               className="min-w-full w-full h-full snap-start relative"
+              aria-roledescription="slide"
+              aria-label={`${card.title} (${i + 1} of ${safeCards.length})`}
             >
-              {/* Background image */}
+              {/* Background image with subtle zoom when active */}
               {card.image && (
-                <img
+                <motion.img
                   src={card.image}
-                  alt={card.title}
+                  alt=""
+                  aria-hidden
                   className="absolute inset-0 w-full h-full object-cover"
+                  variants={imageVariants}
+                  initial="inactive"
+                  animate={active === i ? 'active' : 'inactive'}
+                  transition={{ type: 'spring', stiffness: 80, damping: 20, mass: 0.6 }}
                 />
               )}
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-black/20" />
@@ -166,17 +183,36 @@ export default function SlidingCards({
                     </span>
                   </div>
 
-                  <h2 className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight text-white drop-shadow mb-4">
+                  <motion.h2
+                    className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight text-white drop-shadow mb-4"
+                    variants={contentVariants}
+                    initial="inactive"
+                    animate={active === i ? 'active' : 'inactive'}
+                    transition={{ duration: 0.5, ease: 'easeOut' }}
+                  >
                     {card.title}
-                  </h2>
+                  </motion.h2>
+
                   {card.description && (
-                    <p className="text-base sm:text-lg md:text-xl text-white/85 max-w-2xl mb-6">
+                    <motion.p
+                      className="text-base sm:text-lg md:text-xl text-white/85 max-w-2xl mb-6"
+                      variants={contentVariants}
+                      initial="inactive"
+                      animate={active === i ? 'active' : 'inactive'}
+                      transition={{ duration: 0.6, delay: 0.05, ease: 'easeOut' }}
+                    >
                       {card.description}
-                    </p>
+                    </motion.p>
                   )}
 
                   {(card.ctaText || card.ctaHref) && (
-                    <div className="flex items-center gap-3">
+                    <motion.div
+                      className="flex items-center gap-3"
+                      variants={contentVariants}
+                      initial="inactive"
+                      animate={active === i ? 'active' : 'inactive'}
+                      transition={{ duration: 0.6, delay: 0.1, ease: 'easeOut' }}
+                    >
                       <a
                         href={card.ctaHref || '#'}
                         className="inline-flex items-center justify-center px-5 py-2.5 rounded-lg bg-white text-gray-900 font-semibold shadow/50 shadow-white/10 hover:shadow-white/20 hover:-translate-y-0.5 transition"
@@ -189,7 +225,7 @@ export default function SlidingCards({
                       >
                         Next
                       </button>
-                    </div>
+                    </motion.div>
                   )}
                 </div>
               </div>
@@ -201,20 +237,26 @@ export default function SlidingCards({
       {/* Left/Right Controls */}
       {count > 1 && (
         <>
-          <button
+          <motion.button
             aria-label="Previous slide"
             onClick={prev}
-            className="absolute left-4 top-1/2 -translate-y-1/2 z-10 p-2.5 rounded-full bg-black/40 hover:bg-black/60 text-white backdrop-blur shadow transition"
+            className="absolute left-4 top-1/2 -translate-y-1/2 z-10 p-2.5 rounded-full bg-black/40 hover:bg-black/60 text-white backdrop-blur shadow"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 20 }}
           >
             <ChevronLeft className="w-6 h-6" />
-          </button>
-          <button
+          </motion.button>
+          <motion.button
             aria-label="Next slide"
             onClick={next}
-            className="absolute right-4 top-1/2 -translate-y-1/2 z-10 p-2.5 rounded-full bg-black/40 hover:bg-black/60 text-white backdrop-blur shadow transition"
+            className="absolute right-4 top-1/2 -translate-y-1/2 z-10 p-2.5 rounded-full bg-black/40 hover:bg-black/60 text-white backdrop-blur shadow"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 20 }}
           >
             <ChevronRight className="w-6 h-6" />
-          </button>
+          </motion.button>
         </>
       )}
 
@@ -229,8 +271,8 @@ export default function SlidingCards({
               className={`h-2.5 rounded-full transition-all ${
                 active === i ? 'w-6 bg-white' : 'w-2.5 bg-white/50 hover:bg-white/70'
               }`}
-            />
-          ))}
+            />)
+          )}
         </div>
       )}
     </div>
@@ -238,11 +280,12 @@ export default function SlidingCards({
 }
 
 // Hide native scrollbar for Webkit
-// Can be complemented by a global utility like .scrollbar-hide
-// but we scope it locally here.
-const style = document.createElement('style')
-style.innerHTML = `
-  .scrollbar-hide::-webkit-scrollbar { display: none; }
-  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-`
-document.head.appendChild(style)
+// Scoped locally to avoid global CSS requirements.
+if (typeof document !== 'undefined') {
+  const style = document.createElement('style')
+  style.innerHTML = `
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+  `
+  document.head.appendChild(style)
+}
